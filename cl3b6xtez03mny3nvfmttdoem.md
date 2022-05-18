@@ -4,6 +4,9 @@
 
 STL（Standard Template Library）是 C++ 泛型编程（Generic Programming）的体现，将算法从数据结构中抽象出来，以相同或相近的方式处理各种不同情形。
 
+
+![stl-overview.png](https://cdn.hashnode.com/res/hashnode/image/upload/v1652855647382/LberqF98N.png align="left")
+
 其组件分为六大类：
 
 * Allocator（分配器），负责空间的配置与管理，是一个实现了动态空间配置、空间管理、空间释放的 class template；
