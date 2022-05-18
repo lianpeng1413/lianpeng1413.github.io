@@ -356,17 +356,107 @@ inline ForwardIterator __uninitialized_copy(InputIterator first, InputIterator l
 
 ```
 
-##### char */ wchar_t * 特化
+##### char \*/ wchar_t \* 特化
 
-针对 char * 和 wchar_t * 可以采用 `memmove` 直接移动内存内容来执行复制行为。 
+针对 char \* 和 wchar_t \* 可以采用 `memmove` 直接移动内存内容来执行复制行为。
+
+## Iterator 迭代器以及 traits
+
+是 container 和 algorithm 的粘合剂。
+
+迭代器最重要的工作是重载 `operator *` 和 `operator ->`。可以参考 `auto_ptr` ，一个包装原生指针的对象，能够解决内存泄漏问题。
+
+在这一部分，核心思想是通过编译来让编译器自行确定类别和相关函数。
+
+### 迭代器类型
+
+* Input iterator：不允许外界改变，只读的迭代器；
+* Output iterator：只写的迭代器；
+* Forward iterator：允许“写入型”算法，如 `replace()`、`sort()`，在此种迭代器所形成的区间上进行读写操作；
+* Bidirectional iterator：可双向移动；
+* Random Access iterator：支持随机访问。
+
+设计算法时，尽量使用最贴切的迭代器以提升效率。
+
+
+![stl-iterator-types.png](https://cdn.hashnode.com/res/hashnode/image/upload/v1652862982266/TeSbHbBj1.png align="left")
+
+### traits 萃取 associate types
+
+![stl-iterator-traits.png](https://cdn.hashnode.com/res/hashnode/image/upload/v1652861315472/7jDf4OwBY.png align="left")
+
+```c++
+template <class I>
+struct iterator_traits { // traits 特性
+  typedef typename I::value_type value_type; // 例如 list<int>::iterator
+  typedef typename I::iterator_category iterator_category;
+  typedef typename I::difference_type difference_type;
+  typedef typename I::pointer pointer;
+  typedef typename I::reference reference;
+}
+
+template <class T>
+struct iterator_traits<T*> { 
+  typedef T value_type; // 例如 int*
+  typedef ptrdiff_t difference_type; // 作为原生指针的 difference type
+  typedef T* pointer;
+  typedef T& reference;
+  typedef random_access_iterator_tag iterator_category; // 原生指针是一种 random access iterator
+};
+
+template <class T>
+struct iterator_traits<const T*> {
+  typedef T value_type;
+  typedef ptrdiff_t difference_type; // 作为原生 const 指针的 difference type
+  typedef const T* pointer;
+  typedef const T& reference;
+  typedef random_access_iterator_tag iterator_category;
+}
+```
+
+#### value type
+
+指的是迭代器所指对象的类型。
+
+#### difference type
+
+表示两个迭代器之间的距离，也可以用来表示一个连续空间容器的最大容量，例如 STL 的 `count()`:
+
+```c++
+template <class I, class T>
+typename iterator_traits<I>::difference_type count(I first, I last, T& value) {
+  typename iterator_traits<I>::difference_type n = 0;
+  for (; first != last; first++) {
+    if (*first == value) {
+      ++n;
+    }
+  }
+  return n;
+}
+```
+
+#### reference type
+
+如果 iterator 是 p，那 reference type 指的是 `*p`。
+
+| 迭代器             | reference type |
+| ------------------ | -------------- |
+| constant iterators | const T&       |
+| mutable iterators  | T&             |
+
+#### pointer type
+
+T* 是 pointer type，指向所指之物的地址。
+
+#### iterator_category
+
+迭代器类型，有五种。注意，原生指针是一种 random access iterator。
 
 
 
-## Container
+## Sequence Containers
 
-### Sequence Container 顺序容器
-
-#### vector
+### vector
 
 向量是一个项的有限序列，满足：
 
@@ -383,12 +473,12 @@ template<class T, class Allocator=allocator>
 // allocator 是分配器，默认使用 <defalloc> 中的缺省分配模型
 ```
 
-##### 常用方法接口
+#### 常用方法接口
 
 
 | 方法                       | 功能                                                         |
 | -------------------------- | ------------------------------------------------------------ |
-| vector<double> weights     | 初始化一个空向量                                             |
+| vector\<double\> weights   | 初始化一个空向量                                             |
 | weights.push_back(107.2)   | 尾部插入，通过拷贝构造/移动构造函数                          |
 | weights.insert(itr, 125.0) | 在 itr 所在位置插入一个 125.0；<br />weights 中插入点之后的项依次向后移动一个单位，返回位于新插入项的迭代器 |
 | weights.pop_back()         | 删除尾部项                                                   |
@@ -398,11 +488,11 @@ template<class T, class Allocator=allocator>
 | weights.front() = 105.0    | 将 weights 下标 0 处的项替换成 105.0                         |
 | weights[3] = 110.5         | 将 weights 中下标 3 处的项替换为 110.5                       |
 
-##### 一些实现细节
+#### 一些实现细节
 
 1. vector 是如何存储的？
 
-   当 vector<double> weights 为空时，调用第一个 push_back，此时将分配堆中的一个存储块（随编译器不同而异），如果这一块是 1024B，将分配一个 128 个项的 double 型数组。此时 weights.end() 指向 weights[1]，`weights.end_of_storage` 指向数组之后的第一个单元。
+   当 vector\<double\> weights 为空时，调用第一个 push_back，此时将分配堆中的一个存储块（随编译器不同而异），如果这一块是 1024B，将分配一个 128 个项的 double 型数组。此时 weights.end() 指向 weights[1]，`weights.end_of_storage` 指向数组之后的第一个单元。
 
    如果一个 vector 对象对应的数组已满，而且又尝试新的插入，将重新申请一个新的堆存储块（原来项的数量 * 2）。旧的项将被拷贝到新的数组，旧数组的存储空间被回收，然后将新的项插入新数组。
 
@@ -442,7 +532,7 @@ template<class T, class Allocator=allocator>
    }
    ```
 
-#### deque
+### deque
 
 顺序容器，双端队列是有如下特征的项的有限序列：
 
@@ -451,7 +541,7 @@ template<class T, class Allocator=allocator>
 * 在序列尾进行的插入和删除，最坏时间复杂度为常数；
 * 对于任意的插入和删除，最坏时间复杂度和平均时间复杂度为 \\(O(n) \\)。
 
-##### deque 实现
+#### deque 实现
 
 deque 由一段一段的定量连续空间组成，如图所示，其中 map 被称为映射数组，每一个元素指向保存项的连续存储块，**所有这些块是相同大小的**，start 和 finish 分别指向队列的第一项和最后一项之后的位置。
 
@@ -493,7 +583,7 @@ deque 提供了四种方法，可以直接对 back 和 front 进行操作：`pop
    }
    ```
 
-##### 一些实现细节
+#### 一些实现细节
 
 1. 如何调整大小？
 
@@ -508,7 +598,7 @@ deque 提供了四种方法，可以直接对 back 和 front 进行操作：`pop
 
    这样的移动次数总比同规模的 vector 要少一半，平均时间复杂度仍为\\(O(n) \\) 。
 
-#### list
+### list
 
 链表，顺序容器。其特征有：
 
@@ -517,7 +607,7 @@ deque 提供了四种方法，可以直接对 back 和 front 进行操作：`pop
 
 与 vector 和 deque 相比，list 必须使用 iterator 来遍历，并且不支持随机遍历。
 
-##### 常用方法接口
+#### 常用方法接口
 
 | 方法                             | 功能                                                         |
 | -------------------------------- | ------------------------------------------------------------ |
@@ -535,7 +625,7 @@ deque 提供了四种方法，可以直接对 back 和 front 进行操作：`pop
 | weights.splice(itr, old_weights) | 把 old_weights 中的所有项放在 weights 里 itr 所在位置的前面。<br />不论 weights 或 old_weights 里原先有多少项，这个方法的时间总是常数 |
 | weights.sort()                   | 根据 operator < 排序 weights 中的项。                        |
 
-##### 迭代器接口
+#### 迭代器接口
 
 list 类支持双向迭代器，而不是随机访问迭代器。
 
@@ -547,7 +637,7 @@ iterator operator--(int);
 T& operator*(); // 返回对这个迭代器位置上项的引用
 ```
 
-##### list 实现
+#### list 实现
 
 ```c++
 template<class T>
@@ -604,8 +694,6 @@ iterator insert(iterator position, const T& x) {
 
 
 
-
-
 # 参考
 
 《STL 源码解析》
@@ -613,3 +701,4 @@ iterator insert(iterator position, const T& x) {
 [SGI STL 内存分配方式及malloc底层实现分析](https://www.cnblogs.com/LUO77/p/5824625.html)
 
 [第二级配置器 free-list 详解](https://blog.csdn.net/u014587123/article/details/81628151)
+
